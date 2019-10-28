@@ -5,7 +5,9 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Communicator.Server"
         mc:Ignorable="d"
-        Title="Server" Height="315" Width="277">
+        Title="Server" Height="315" Width="277"
+        WindowStartupLocation="CenterScreen"
+        Unloaded="Window_Unloaded">
     <Window.DataContext>
         <local:MainWindowViewModel />
     </Window.DataContext>
@@ -14,11 +16,16 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <Label Content="{Binding Status}" Grid.Row="0"/>
-        <StackPanel Grid.Row="1">
-            <TextBox Text="{Binding Text}" />
+        <StackPanel Grid.Row="0">
+            <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Enter" Command="{Binding Send}" />
+                </TextBox.InputBindings>
+            </TextBox>
             <Button Command="{Binding Send}">Send</Button>
         </StackPanel>
-
+        <Border Grid.Row="1" Margin="5" BorderBrush="Black" BorderThickness="1">
+            <TextBlock Text="{Binding Output}"  />
+        </Border>
     </Grid>
 </Window>

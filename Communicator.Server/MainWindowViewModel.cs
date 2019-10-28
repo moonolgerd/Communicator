@@ -2,9 +2,7 @@
 using Newtonsoft.Json;
 using Prism.Commands;
 using Prism.Mvvm;
-using ProtoBuf;
 using System;
-using System.IO;
 using System.IO.Pipes;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,48 +10,40 @@ using System.Windows.Input;
 
 namespace Communicator.Server
 {
-    public class MainWindowViewModel : BindableBase
+    public sealed class MainWindowViewModel : BindableBase, IDisposable
     {
         private readonly NamedPipeServerStream namedPipeServerStream;
-        private string status;
         private string text;
-        
+        private string output = string.Empty;
+
         public MainWindowViewModel()
         {
-            namedPipeServerStream = new NamedPipeServerStream("Communicator", PipeDirection.InOut, 2,
-                PipeTransmissionMode.Message);
-
-            Status = "Waiting For Connection";
+            namedPipeServerStream = new NamedPipeServerStream("Communicator", PipeDirection.InOut, 1,
+                PipeTransmissionMode.Message, PipeOptions.Asynchronous);
 
             Task.Run(Connect);
-            
+
             Send = new DelegateCommand(() =>
             {
-                Task.Run(() =>
+                Task.Run(async () =>
                 {
                     var person = new Person
                     {
-                        FirstName = "Server is responding"
+                        FirstName = Text
                     };
-                    string serialised = JsonConvert.SerializeObject(person);
-                    byte[] messageBytes = Encoding.UTF8.GetBytes(serialised);
-                    namedPipeServerStream.Write(messageBytes, 0, messageBytes.Length);
+
+                    var serialized = JsonConvert.SerializeObject(person);
+                    var messageBytes = Encoding.UTF8.GetBytes(serialized);
+                    await namedPipeServerStream.WriteAsync(messageBytes, 0, messageBytes.Length);
+
+                    Text = string.Empty;
                 });
             });
-
         }
 
-        private void Connect()
+        private async void Connect()
         {
             namedPipeServerStream.WaitForConnection();
-
-            var p = new Person
-            {
-                FirstName = "Client has connected"
-            };
-            string serialised = JsonConvert.SerializeObject(p);
-            byte[] messageBytes = Encoding.UTF8.GetBytes(serialised);
-            namedPipeServerStream.Write(messageBytes, 0, messageBytes.Length);
 
             while (true)
             {
@@ -61,16 +51,17 @@ namespace Communicator.Server
                 byte[] messageBuffer = new byte[5];
                 do
                 {
-                    namedPipeServerStream.Read(messageBuffer, 0, messageBuffer.Length);
+                    await namedPipeServerStream.ReadAsync(messageBuffer, 0, messageBuffer.Length);
                     var messageChunk = Encoding.UTF8.GetString(messageBuffer);
                     messageBuilder.Append(messageChunk);
                     messageBuffer = new byte[messageBuffer.Length];
                 }
                 while (!namedPipeServerStream.IsMessageComplete);
 
-                var person = JsonConvert.DeserializeObject<Person>(messageBuilder.ToString());
+                var p = JsonConvert.DeserializeObject<Person>(messageBuilder.ToString());
 
-                Text = person.FirstName;
+                
+                Output += p.FirstName + "\n";
             }
         }
 
@@ -81,11 +72,13 @@ namespace Communicator.Server
             get => text;
             set => SetProperty(ref text, value);
         }
+        
+        public string Output { get => output; set => SetProperty(ref output, value); }
 
-        public string Status
+        public void Dispose()
         {
-            get => status;
-            set => SetProperty(ref status, value);
+            namedPipeServerStream.Disconnect();
+            namedPipeServerStream.Dispose();
         }
     }
 }
